@@ -21,7 +21,7 @@ tf.flags.DEFINE_integer("embedding_dim", 128, "Dimensionalidade de character emb
 tf.flags.DEFINE_string("filter_sizes", "3,4,5", "Tamanho dos filtros separados por virgula (default: '3,4,5')")
 tf.flags.DEFINE_integer("num_filters", 128, "Quantidade de filtros por tipo (default: 128)")
 tf.flags.DEFINE_float("dropout_keep_prob", 0.5, "Probabilidade do dropout (default: 0.5)")
-#tf.flags.DEFINE_float("l2_reg_lambda", 0.0, "L2 regularization lambda (default: 0.0)")
+tf.flags.DEFINE_float("l2_reg_lambda", 0.0, "L2 regularization lambda (default: 0.0)")
 
 # Parametros de treinamento
 tf.flags.DEFINE_integer("batch_size", 64, "Tamanho do batch de treinamento (default: 64)")
@@ -85,7 +85,8 @@ with tf.Graph().as_default():
             vocab_size=len(vocab_processor.vocabulary_),
             embedding_size=FLAGS.embedding_dim,
             filter_sizes=list(map(int, FLAGS.filter_sizes.split(","))),
-            num_filters=FLAGS.num_filters)
+            num_filters=FLAGS.num_filters,
+            l2_reg_lambda=FLAGS.l2_reg_lambda)
 
         # definindo treinamento
         # contagem das iteracoes de treinamento
