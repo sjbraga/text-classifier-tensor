@@ -15,6 +15,7 @@ from cnn_text import TextCNN
 tf.flags.DEFINE_float("dev_sample_percentage", .1, "Porcentagem dos dados usados para validacao")
 tf.flags.DEFINE_string("positive_data_file", "./dataset/rt-polarity.pos", "Caminho do arquivo de reviews positivas")
 tf.flags.DEFINE_string("negative_data_file", "./dataset/rt-polarity.neg", "Caminho do arquivo de reviews negativas")
+tf.flags.DEFINE_integer("max_dataset_inputs", 1000, "Numero maximo de exemplos de treinamento. 0 para utilizar todo o dataset (default: 0)")
 
 # Parametros do modelo
 tf.flags.DEFINE_integer("embedding_dim", 128, "Dimensionalidade de character embedding (default: 128)")
@@ -26,7 +27,7 @@ tf.flags.DEFINE_float("l2_reg_lambda", 0.0, "L2 regularization lambda (default: 
 # Parametros de treinamento
 tf.flags.DEFINE_integer("batch_size", 64, "Tamanho do batch de treinamento (default: 64)")
 tf.flags.DEFINE_integer("num_epochs", 200, "Numero de epocas de treinamento (default: 200)")
-tf.flags.DEFINE_integer("evaluate_every", 100, "Validar o modelo apos quantas iteracoes (default: 100)")
+tf.flags.DEFINE_integer("evaluate_every", 10, "Validar o modelo apos quantas iteracoes (default: 100)")
 tf.flags.DEFINE_integer("checkpoint_every", 100, "Salvar modelo apos quantas iteracoes (default: 100)")
 tf.flags.DEFINE_integer("num_checkpoints", 5, "Numero de checkpoints mantidos (default: 5)")
 
@@ -63,11 +64,15 @@ shuffle_indices = np.random.permutation(np.arange(len(y)))
 x_shuffled = x[shuffle_indices]
 y_shuffled = y[shuffle_indices]
 
+if FLAGS.max_dataset_inputs != 0:
+    x_shuffled = x_shuffled[:FLAGS.max_dataset_inputs]
+    y_shuffled = y_shuffled[:FLAGS.max_dataset_inputs]
+
 # split do dataset em treino e teste
-dev_sample_index = -1 * int(FLAGS.dev_sample_percentage * float(len(y)))
+dev_sample_index = -1 * int(FLAGS.dev_sample_percentage * float(len(y_shuffled)))
 x_train, x_dev = x_shuffled[:dev_sample_index], x_shuffled[dev_sample_index:]
 y_train, y_dev = y_shuffled[:dev_sample_index], y_shuffled[dev_sample_index:]
-print("Tamanho do vocabulario: {:d}",format(len(vocab_processor.vocabulary_)))
+print("Tamanho do vocabulario: {:d}".format(len(vocab_processor.vocabulary_)))
 print("Train/dev split: {:d}/{:d}".format(len(y_train), len(y_dev)))
 
 
@@ -113,7 +118,7 @@ with tf.Graph().as_default():
         out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", timestamp))
         print("Escrevendo em {}\n".format(out_dir))
 
-        #sumario de perda e acuracea
+        #sumario de perda e acuracia
         loss_summary = tf.summary.scalar("loss", cnn.loss)
         acc_summary = tf.summary.scalar("accuracy", cnn.accuracy)
 
@@ -171,8 +176,28 @@ with tf.Graph().as_default():
                 feed_dict)
             time_str = datetime.datetime.now().isoformat()
             print("{}: step: {}, loss: {:g}, acc: {:g},".format(time_str, step, loss, accuracy))
+            #confusion_update_op, confusion = _get_streaming_metrics(cnn.predictions, y_batch, 2)
+            #sess.run(confusion_update_op)
             if writer:
                 writer.add_summary(summaries, step)
+        
+        def _get_streaming_metrics(prediction, label, num_classes):
+            with tf.name_scope("test"):
+                #accuracy, accuracy_update = tf.metrics.accuracy(label, prediction, name="accuracy")
+
+                batch_confusion = tf.confusion_matrix(label, prediction, num_classes=num_classes, name="batch_confusion")
+
+                confusion = tf.Variable(tf.zeros([num_classes, num_classes], dtype=tf.int32), name="confusion")
+
+                confusion_update = confusion.assign(confusion + batch_confusion)
+
+                confusion_image = tf.reshape(tf.cast(confusion, tf.float32), [1, num_classes, num_classes, 1])
+
+                #test_op = tf.group(accuracy_update, confusion_update)
+
+                tf.summary.image('confusion', confusion_image)
+
+            return confusion_update, confusion
 
         #gerando os batches
         batches = dh.batch_iter(list(zip(x_train, y_train)), FLAGS.batch_size, FLAGS.num_epochs)
