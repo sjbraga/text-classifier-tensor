@@ -15,7 +15,7 @@ from cnn_text import TextCNN
 tf.flags.DEFINE_float("dev_sample_percentage", .1, "Porcentagem dos dados usados para validacao")
 tf.flags.DEFINE_string("positive_data_file", "./dataset/rt-polarity.pos", "Caminho do arquivo de reviews positivas")
 tf.flags.DEFINE_string("negative_data_file", "./dataset/rt-polarity.neg", "Caminho do arquivo de reviews negativas")
-tf.flags.DEFINE_integer("max_dataset_inputs", 1000, "Numero maximo de exemplos de treinamento. 0 para utilizar todo o dataset (default: 0)")
+tf.flags.DEFINE_integer("max_dataset_inputs", 0, "Numero maximo de exemplos de treinamento. 0 para utilizar todo o dataset (default: 0)")
 
 # Parametros do modelo
 tf.flags.DEFINE_integer("embedding_dim", 128, "Dimensionalidade de character embedding (default: 128)")
