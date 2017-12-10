@@ -17,3 +17,7 @@ O treinamento com todos os exemplos no dataset leva em torno de 1h30, para execu
 Para utilizar regularização L2 utilizar:
 
     python train.py --l2_reg_lambda=0.1
+
+Para iniciar o TensorBoard
+
+    tensorboard --logdir=./runs
