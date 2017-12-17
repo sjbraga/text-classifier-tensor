@@ -18,6 +18,10 @@ Para utilizar regularização L2 utilizar:
 
     python train.py --l2_reg_lambda=0.1
 
+Para dar outro nome na pasta da execução do experimento utilizar:
+
+    python train.py --experiment_name=nome
+
 Para iniciar o TensorBoard
 
     tensorboard --logdir=./runs
