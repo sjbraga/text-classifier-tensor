@@ -2,12 +2,43 @@ import datetime
 import os
 import time
 
+from matplotlib import pyplot as plt
+from StringIO import StringIO
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import learn
 
+from sklearn.metrics import roc_curve
+from sklearn.metrics import roc_auc_score
+from sklearn.metrics import confusion_matrix
+
 import data_helper as dh
 from cnn_text import TextCNN
+
+def roc(prediction, label):
+    """
+        Calculates area under roc value
+    """
+    false_positive_rate, true_positive_rate, thresholds = roc_curve(label, prediction)
+    roc_score = roc_auc_score(label, prediction)
+    print("AUC: {}".format(roc_score))
+
+    plt.figure()
+    plt.plot(false_positive_rate, true_positive_rate,'-', label='Area Under the Curve (AUC = %0.4f)' % roc_score)
+    plt.title('ROC Curve')
+    plt.xlabel('FPR (False Positive Rate)')
+    plt.ylabel('TPR (True Positive Rate)')
+    plt.legend(loc="lower right")
+
+    plt.savefig('./runs/img/roc.png')
+
+    img = plt.imread('./runs/img/roc.png')
+
+    img = np.expand_dims(img, axis=0)
+
+    return roc_score, img
+
 
 # Parametros -----------------------------------------------------
 
@@ -34,6 +65,9 @@ tf.flags.DEFINE_integer("num_checkpoints", 5, "Numero de checkpoints mantidos (d
 # Parametros do tensorflow
 tf.flags.DEFINE_boolean("allow_soft_placement", True, "Allow device soft device placement")
 tf.flags.DEFINE_boolean("log_device_placement", True, "Log placement of ops on devices")
+
+# Parametros da execucao
+tf.flags.DEFINE_string("experiment_name", None, "Nome do experimento na pasta runs (default:None, coloca timestamp)")
 
 FLAGS = tf.flags.FLAGS
 FLAGS._parse_flags()
@@ -114,13 +148,21 @@ with tf.Graph().as_default():
         grad_summaries_merged = tf.summary.merge(grad_summaries)
 
         # gerando sumario do treino e modelo
-        timestamp = str(int(time.time()))
-        out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", timestamp))
+        dir_name = str(int(time.time()))
+        if FLAGS.experiment_name is not None:
+            dir_name = FLAGS.experiment_name
+        out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", dir_name))
         print("Escrevendo em {}\n".format(out_dir))
+
+        auc_value = tf.placeholder(tf.float32)
+        roc_curve_value = tf.placeholder(tf.float32, shape=(1,480,640,4))
 
         #sumario de perda e acuracia
         loss_summary = tf.summary.scalar("loss", cnn.loss)
         acc_summary = tf.summary.scalar("accuracy", cnn.accuracy)
+        roc_summary = tf.summary.scalar("auc", auc_value)
+        roc_curve_summary = tf.summary.image("roc_curve", roc_curve_value)
+
 
         #sumario de treino
         train_summary_op = tf.summary.merge([loss_summary, acc_summary])
@@ -128,7 +170,7 @@ with tf.Graph().as_default():
         train_summary_writer = tf.summary.FileWriter(train_summary_dir, sess.graph_def)
 
         #sumario dev
-        dev_summary_op = tf.summary.merge([loss_summary, acc_summary])
+        dev_summary_op = tf.summary.merge([loss_summary, acc_summary, roc_summary, roc_curve_summary])
         dev_summary_dir = os.path.join(out_dir, "summaries", "dev")
         dev_summary_writer = tf.summary.FileWriter(dev_summary_dir, sess.graph_def)
 
@@ -171,33 +213,24 @@ with tf.Graph().as_default():
                 cnn.input_y: y_batch,
                 cnn.dropout_keep_prob: 1.0 #desliga dropout para avaliar
             }
-            step, summaries, loss, accuracy = sess.run(
-                [global_step, dev_summary_op, cnn.loss, cnn.accuracy],
+
+
+            step, loss, accuracy, predictions, oh_input_y = sess.run(
+                [global_step, cnn.loss, cnn.accuracy, cnn.predictions, cnn.one_hot_input_y],
                 feed_dict)
             time_str = datetime.datetime.now().isoformat()
             print("{}: step: {}, loss: {:g}, acc: {:g},".format(time_str, step, loss, accuracy))
-            #confusion_update_op, confusion = _get_streaming_metrics(cnn.predictions, y_batch, 2)
-            #sess.run(confusion_update_op)
+            auc, image_roc = roc(predictions, oh_input_y)
+            summaries = sess.run(dev_summary_op, feed_dict={ auc_value: auc, 
+                                                                cnn.input_x: x_batch, 
+                                                                cnn.input_y: y_batch, 
+                                                                cnn.dropout_keep_prob: 1.0,
+                                                                roc_curve_value: image_roc })
             if writer:
                 writer.add_summary(summaries, step)
-        
-        def _get_streaming_metrics(prediction, label, num_classes):
-            with tf.name_scope("test"):
-                #accuracy, accuracy_update = tf.metrics.accuracy(label, prediction, name="accuracy")
+                writer.flush()
 
-                batch_confusion = tf.confusion_matrix(label, prediction, num_classes=num_classes, name="batch_confusion")
 
-                confusion = tf.Variable(tf.zeros([num_classes, num_classes], dtype=tf.int32), name="confusion")
-
-                confusion_update = confusion.assign(confusion + batch_confusion)
-
-                confusion_image = tf.reshape(tf.cast(confusion, tf.float32), [1, num_classes, num_classes, 1])
-
-                #test_op = tf.group(accuracy_update, confusion_update)
-
-                tf.summary.image('confusion', confusion_image)
-
-            return confusion_update, confusion
 
         #gerando os batches
         batches = dh.batch_iter(list(zip(x_train, y_train)), FLAGS.batch_size, FLAGS.num_epochs)

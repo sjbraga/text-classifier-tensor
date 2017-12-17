@@ -21,6 +21,7 @@ class TextCNN(object):
         self.input_x = tf.placeholder(tf.int32, [None, sequence_length], name="input_x")
         self.input_y = tf.placeholder(tf.float32, [None, num_classes], name="input_y")
         self.dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
+        self.one_hot_input_y = tf.argmax(self.input_y, 1)
 
         l2_loss = tf.constant(0.0)
 
